@@ -1,1 +1,1 @@
-# geospatial-inference
+# yolo-geo-inference
