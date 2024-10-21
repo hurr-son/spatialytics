@@ -133,9 +133,9 @@ class GeoInference:
             print("No input provided. Please specify a tif_path or stac_catalog_url.")
     
 if __name__ == '__main__':
-    model_path = '/home/hurr_son/data/models/yolo11n-obb.pt'
-    output_path = 'detections/detections_all.parquet'
-    stac_catalog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/stac/catalog.json'
+    model_path = 'path/to/model'
+    output_path = 'path/to/detection.parquet'
+    stac_catalog_url = 'path/to/stac/catalog.json'
     window_size = 1280
     stride = 640
     conf_threshold = 0.1
