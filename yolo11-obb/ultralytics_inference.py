@@ -52,6 +52,7 @@ class GeoInference:
         try:
             results = self.model(
                 img_np, 
+                device='cuda:0',
                 verbose=True, 
                 conf=self.conf_threshold, 
                 iou=self.iou_threshold, 
@@ -160,13 +161,13 @@ if __name__ == '__main__':
     model_path = '/home/hurr_son/repos/yolo-geospatial-implementations/models/yolo11n-obb.pt'
     class_yaml_path = '/home/hurr_son/repos/yolo-geospatial-implementations/models/class-yaml/dotav1.yaml'
     output_path = '/home/hurr_son/repos/yolo-geospatial-implementations/test/detection.parquet'
-    stac_catalog_url = ''
-    cog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/357000e3090000n.tif'  # Example COG URL
+    # stac_catalog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/stac/catalog.json'
+    cog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/357000e3090000n.tif'
     window_size = 1280
     stride = 640
     conf_threshold = 0.25
     iou_threshold = 0.1
-    classes_list = [1]  # Example of specifying class IDs
+    classes_list = [1] 
 
     geo_inference = GeoInference(
         model_path=model_path,
