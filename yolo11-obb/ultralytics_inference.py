@@ -7,6 +7,9 @@ from ultralytics import YOLO
 import pystac
 from pathlib import Path
 import yaml
+import torch
+from torchvision.ops import nms
+
 
 class GeoInference:
     def __init__(self, model_path, class_yaml_path, output_path, window_size=1280, stride=640, conf_threshold=0.1, iou_threshold=0.5, classes_list=None):
@@ -161,11 +164,11 @@ if __name__ == '__main__':
     model_path = '/home/hurr_son/repos/yolo-geospatial-implementations/models/yolo11n-obb.pt'
     class_yaml_path = '/home/hurr_son/repos/yolo-geospatial-implementations/models/class-yaml/dotav1.yaml'
     output_path = '/home/hurr_son/repos/yolo-geospatial-implementations/test/detection.parquet'
-    # stac_catalog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/stac/catalog.json'
-    cog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/357000e3090000n.tif'
+    stac_catalog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/stac/catalog.json'
+    # cog_url = 'https://coastalimagery.blob.core.windows.net/digitalcoast/TampaBayFL_RGBN_2023_9995/357000e3090000n.tif'
     window_size = 1280
     stride = 640
-    conf_threshold = 0.25
+    conf_threshold = 0.2
     iou_threshold = 0.1
     classes_list = [1] 
 
@@ -179,4 +182,4 @@ if __name__ == '__main__':
         iou_threshold=iou_threshold,
         classes_list=classes_list
     )
-    geo_inference.run(cog_url=cog_url)
+    geo_inference.run(stac_catalog_url=stac_catalog_url)
