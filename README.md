@@ -18,11 +18,6 @@ To play around with this, install the main dependencies:
 pip install -r requirements.txt
 ```
 
-### Installing YOLO and PyTorch
-
-- **YOLO**: Check out [Ultralytics Installation Guide](https://github.com/ultralytics/ultralytics#installation) for the latest instructions.
-- **PyTorch**: Go to the [PyTorch Installation Guide](https://pytorch.org/get-started/locally/) and select the version that works with your system and CUDA.
-
 ## How to Use
 
 1. **Initialize the `GeoInference` Class**:
