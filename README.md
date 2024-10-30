@@ -23,7 +23,7 @@ pip install -r requirements.txt
 1. **Initialize the `GeoInference` Class**:
    ```python
    from pathlib import Path
-   from yolo_geospatial_implementations import GeoInference
+   from ultralytics_inference import GeoInference
 
    geo_inference = GeoInference(
        model_path=Path("path/to/your/yolo/model.pt"),
