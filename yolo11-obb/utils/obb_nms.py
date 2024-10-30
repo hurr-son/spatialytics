@@ -113,9 +113,4 @@ def load_and_run_nms(
     filtered_detections.to_parquet(output_parquet, index=False)
     print(f"Filtered detections saved to {output_parquet}")
 
-if __name__ == "__main__":
-    input_parquet: Path = Path("/home/hurr_son/repos/yolo-geospatial-implementations/test/detection.parquet")
-    output_parquet: Path = Path("/home/hurr_son/repos/yolo-geospatial-implementations/test/filtered_detections.parquet")
-    iou_threshold: float = 0.1
 
-    load_and_run_nms(input_parquet, output_parquet, iou_threshold)
