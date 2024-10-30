@@ -1,0 +1,8 @@
+geopandas
+shapely
+numpy
+tqdm
+rasterio
+# Install 'ultralytics' following the instructions at https://github.com/ultralytics/ultralytics#installation
+pystac
+pyyam
