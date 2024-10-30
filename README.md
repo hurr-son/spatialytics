@@ -55,10 +55,3 @@ pip install -r requirements.txt
 3. **Results**:  
    The detections (with geographic coordinates) will be saved as a Parquet file in the path you specified.
 
-## Notes
-
-This is a pretty experimental setup, so things might change as I tinker with it. If you’re trying this out and run into any issues or have suggestions, feel free to let me know.
-
----
-
-Let me know if you need any more details!
