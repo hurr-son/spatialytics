@@ -1,6 +1,6 @@
 
 
-# spatialytics
+# yolo-geospatial-implentations
 
 This repo is a collection of scripts and experiments for running YOLO-based object detection on geospatial imagery. It’s a bit of a work-in-progress, mostly aimed at testing different ways to detect objects in raster images (TIFFs, Cloud Optimized GeoTIFFs, and STAC catalog images) using YOLO. Both standard bounding boxes (BBox) and Oriented Bounding Boxes (OBB) are supported.
 
