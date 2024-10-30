@@ -7,7 +7,7 @@ from ultralytics import YOLO
 import pystac
 from pathlib import Path
 import yaml
-import torch  # Added import for torch
+import torch 
 from typing import List, Optional, Dict, Any, Union, Tuple
 
 class GeoInference:
