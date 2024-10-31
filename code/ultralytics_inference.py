@@ -7,7 +7,7 @@ from ultralytics import YOLO
 import pystac
 from pathlib import Path
 import yaml
-import torch 
+import torch
 from typing import List, Optional, Dict, Any, Union, Tuple
 
 class GeoInference:
@@ -26,11 +26,13 @@ class GeoInference:
         stride (int): Stride of the sliding window.
         conf_threshold (float): Confidence threshold for detections.
         iou_threshold (float): Intersection over Union threshold for NMS.
-        classes_list (Optional[List[int]]): List of class indices to detect.
+        classes_list_input (Optional[List[Union[int, str]]]): List of class indices or names to detect.
+        classes_list (Optional[List[int]]): Processed list of class indices to detect.
         detection_type (str): Type of detection ('obb' or 'bbox').
         all_detections (List[Dict[str, Any]]): Accumulated detections from the image.
         model (YOLO): Loaded YOLO model for inference.
-        classes (Optional[Dict[str, Any]]): Mapping of class indices to class names.
+        classes_index_to_name (Dict[str, Any]): Mapping of class indices to class names.
+        classes_name_to_index (Dict[str, int]): Mapping of class names to class indices.
         device (str): The device to run inference on ('cuda' or 'cpu').
     """
 
@@ -43,7 +45,7 @@ class GeoInference:
         stride: int = 640,
         conf_threshold: float = 0.1,
         iou_threshold: float = 0.5,
-        classes_list: Optional[List[int]] = None,
+        classes_list: Optional[List[Union[int, str]]] = None,
         detection_type: str = 'obb',
         device: Optional[str] = None
     ) -> None:
@@ -58,8 +60,9 @@ class GeoInference:
             stride (int, optional): Stride of the sliding window. Defaults to 640.
             conf_threshold (float, optional): Confidence threshold for detections. Defaults to 0.1.
             iou_threshold (float, optional): IoU threshold for Non-Maximum Suppression. Defaults to 0.5.
-            classes_list (Optional[List[int]], optional): List of class indices to detect. Defaults to None.
+            classes_list (Optional[List[Union[int, str]]], optional): List of class indices or names to detect.
             detection_type (str, optional): Type of detection ('obb' or 'bbox'). Defaults to 'obb'.
+            device (Optional[str], optional): Device to use for computation ('cuda' or 'cpu'). Defaults to None.
         """
         if device:
             self.device = device
@@ -72,11 +75,13 @@ class GeoInference:
         self.stride: int = stride
         self.conf_threshold: float = conf_threshold
         self.iou_threshold: float = iou_threshold
-        self.classes_list: Optional[List[int]] = classes_list
+        self.classes_list_input: Optional[List[Union[int, str]]] = classes_list
+        self.classes_list: Optional[List[int]] = None  # Will hold the processed indices
         self.detection_type: str = detection_type
         self.all_detections: List[Dict[str, Any]] = []
         self.load_model()
-        self.classes: Optional[Dict[str, Any]] = self.load_classes()
+        self.load_classes()
+        self.process_classes_list()
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
 
     def get_device(self) -> str:
@@ -101,21 +106,41 @@ class GeoInference:
         self.model: YOLO = YOLO(self.model_path)
         print(f"Loaded model from {self.model_path}")
 
-    def load_classes(self) -> Optional[Dict[str, Any]]:
+    def load_classes(self) -> None:
         """
-        Loads class mappings from the YAML file.
-
-        Returns:
-            Optional[Dict[str, Any]]: A dictionary mapping class indices to names, or None if not found.
+        Loads class mappings from the YAML file and creates mappings from indices to names and names to indices.
         """
         try:
             with open(self.class_yaml_path, 'r') as file:
-                classes: Dict[str, Any] = yaml.safe_load(file)
-            print(f"Loaded classes: {classes}")
-            return classes
+                class_data = yaml.safe_load(file)
+            self.classes_index_to_name = class_data.get('names', {})
+            # Create reverse mapping
+            self.classes_name_to_index = {name: int(index) for index, name in self.classes_index_to_name.items()}
+            print(f"Loaded classes: {self.classes_index_to_name}")
         except FileNotFoundError:
             print("Class YAML file not found. Ensure the file path is correct.")
-            return None
+            self.classes_index_to_name = {}
+            self.classes_name_to_index = {}
+
+    def process_classes_list(self) -> None:
+        """
+        Processes the classes_list input, converting class names to indices if necessary.
+        """
+        if self.classes_list_input is None:
+            self.classes_list = None
+            return
+        self.classes_list = []
+        for cls in self.classes_list_input:
+            if isinstance(cls, int):
+                self.classes_list.append(cls)
+            elif isinstance(cls, str):
+                cls_index = self.classes_name_to_index.get(cls)
+                if cls_index is not None:
+                    self.classes_list.append(cls_index)
+                else:
+                    print(f"Warning: Class name '{cls}' not found in class mappings.")
+            else:
+                print(f"Warning: Unsupported class type '{type(cls)}' in classes_list. Expected int or str.")
 
     def pixel_to_geo(
         self,
@@ -167,7 +192,7 @@ class GeoInference:
         try:
             results = self.model(
                 img_np,
-                device=self.device,  # Use detected device
+                device=self.device,
                 verbose=True,
                 conf=self.conf_threshold,
                 iou=self.iou_threshold,
@@ -340,10 +365,12 @@ class GeoInference:
                 for x_pixel, y_pixel in pixel_coords
             ]
             geometry: Polygon = Polygon(geo_coords)
+            class_name = self.classes_index_to_name.get(str(class_index), str(class_index))
             geo_detections.append({
                 'geometry': geometry,
                 'confidence': confidence,
                 'class_index': class_index,
+                'class_name': class_name,
                 'source_image': source_image
             })
         gdf: gpd.GeoDataFrame = gpd.GeoDataFrame(geo_detections, geometry='geometry')
@@ -387,5 +414,3 @@ class GeoInference:
             self.convert_and_save_detections()
         else:
             print("No input provided. Please specify a tif_path, stac_catalog_url, or cog_url.")
-
-
