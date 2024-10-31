@@ -74,7 +74,7 @@ To address duplicate detections across overlapping windows, `obb_nms.py` provide
 
 - **`calculate_obb_iou`**: Calculates the Intersection over Union (IoU) for two oriented bounding boxes represented as Shapely polygons. This IoU metric is used to assess overlap when applying NMS.
 
-- **`run_secondary_obb_nms`**: Takes in a `GeoDataFrame` of detections and performs custom NMS across windows, retaining only the highest-confidence detections based on the specified IoU threshold. The function returns a filtered `GeoDataFrame` with the remaining detections.
+- **`run_secondary_obb_nms`**: Takes in a `GeoDataFrame` of detections and performs custom NMS across the post-inference detections, retaining only the highest-confidence detections based on the specified IoU threshold. The function returns a filtered `GeoDataFrame` with the remaining detections.
 
 - **`load_and_run_nms`**: A wrapper function that loads detections from an input Parquet file, applies OBB NMS to remove duplicates, and saves the filtered detections to an output Parquet file.
 
