@@ -24,9 +24,9 @@ pip install -r requirements.txt
 
 ## Models
 
-The `YOLO11-obb` model included here is pretrained on the ['DOTAv1 dataset'](https://captain-whu.github.io/DOTA/index.html)
+The `YOLO11-obb` model included here is pretrained on the [DOTAv1 dataset](https://captain-whu.github.io/DOTA/index.html)
 
-The repository includes the smallest version of this model, `YOLO11n-obb`, as well as standard object detection models `YOLO11n` and `YOLO8n`. These models are trained on the [`COCO dataset`](https://cocodataset.org/#home) rather than geospatial imagery, but applying them to geospatial data can still yield useful results.
+The repository includes the smallest version of this model, `YOLO11n-obb`, as well as standard object detection models `YOLO11n` and `YOLO8n`. These models are trained on the [COCO dataset](https://cocodataset.org/#home) rather than geospatial imagery, but applying them to geospatial data can still yield useful results.
 
 ## How to Use
 
