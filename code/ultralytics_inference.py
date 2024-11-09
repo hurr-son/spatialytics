@@ -9,6 +9,9 @@ from pathlib import Path
 import yaml
 import torch
 from typing import List, Optional, Dict, Any, Union, Tuple
+from PIL import Image
+import uuid
+
 
 class GeoInference:
     """
@@ -64,10 +67,7 @@ class GeoInference:
             detection_type (str, optional): Type of detection ('obb' or 'bbox'). Defaults to 'obb'.
             device (Optional[str], optional): Device to use for computation ('cuda' or 'cpu'). Defaults to None.
         """
-        if device:
-            self.device = device
-        else:
-            self.device = self.get_device()
+        self.device = device if device else self.get_device()
         self.model_path: Path = Path(model_path)
         self.class_yaml_path: Path = Path(class_yaml_path)
         self.output_path: Path = Path(output_path)
@@ -91,12 +91,8 @@ class GeoInference:
         Returns:
             str: The device to use for computation.
         """
-        if torch.cuda.is_available():
-            device = 'cuda'
-            print("CUDA is available. Using GPU for inference.")
-        else:
-            device = 'cpu'
-            print("CUDA is not available. Using CPU for inference.")
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"Using device: {device}")
         return device
 
     def load_model(self) -> None:
@@ -167,7 +163,7 @@ class GeoInference:
         dataset: rasterio.io.DatasetReader,
         x: int,
         y: int
-    ) -> Optional[List[Any]]:
+    ) -> Optional[Tuple[List[Any], np.ndarray]]:
         """
         Processes a window of the image and performs inference.
 
@@ -177,40 +173,44 @@ class GeoInference:
             y (int): Y-coordinate (row) of the top-left corner of the window.
 
         Returns:
-            Optional[List[Any]]: List of detection results, or None if an error occurs.
+            Optional[Tuple[List[Any], np.ndarray]]: Tuple of detection results and image array, or None if an error occurs.
         """
         window: Window = Window(x, y, self.window_size, self.window_size)
-        img: np.ndarray = dataset.read([1, 2, 3], window=window)
-        if img.shape[1] < self.window_size or img.shape[2] < self.window_size:
-            padded_img: np.ndarray = np.zeros(
-                (img.shape[0], self.window_size, self.window_size),
-                dtype=img.dtype
-            )
-            padded_img[:, :img.shape[1], :img.shape[2]] = img
-            img = padded_img
+        img: np.ndarray = dataset.read([1, 2, 3], window=window, boundless=True)
         img_np: np.ndarray = np.moveaxis(img, 0, -1)
+        if img_np.size == 0:
+            return None
         try:
             results = self.model(
                 img_np,
                 device=self.device,
-                verbose=True,
+                verbose=False,
                 conf=self.conf_threshold,
                 iou=self.iou_threshold,
                 classes=self.classes_list
             )
-            return results
+            return results, img_np
         except Exception as e:
             print(f"Error during inference at window x: {x}, y: {y}: {e}")
             return None
 
-    def process_image_obb(self, tif_href: Union[str, Path]) -> None:
+    def process_image(
+        self,
+        tif_href: Union[str, Path],
+        generate_crops: bool = False,
+        crops_output_dir: Optional[Path] = None
+    ) -> None:
         """
-        Processes a TIFF image and collects Oriented Bounding Box (OBB) detections.
+        Processes a TIFF image and collects detections.
 
         Args:
             tif_href (Union[str, Path]): Path or URL to the TIFF image.
+            generate_crops (bool, optional): If True, saves image crops of detections. Defaults to False.
+            crops_output_dir (Optional[Path], optional): Directory to save image crops. Defaults to None.
         """
-        print(f"Processing image with OBB: {tif_href}")
+        print(f"Processing image: {tif_href}")
+        if generate_crops and crops_output_dir:
+            crops_output_dir.mkdir(parents=True, exist_ok=True)
         try:
             with rasterio.open(tif_href) as dataset:
                 width: int = dataset.width
@@ -223,97 +223,133 @@ class GeoInference:
                 print(f"Generated {len(x_windows)} x_windows and {len(y_windows)} y_windows for image {tif_href}")
                 for y in y_windows:
                     for x in x_windows:
-                        results: Optional[List[Any]] = self.process_window(dataset, x, y)
-                        if not results:
+                        result_tuple = self.process_window(dataset, x, y)
+                        if not result_tuple:
                             continue
+                        results, img_np = result_tuple
                         for result in results:
-                            obb = result.obb
-                            if obb is None:
-                                continue
-                            for idx in range(len(obb.conf)):
-                                confidence: float = obb.conf[idx].item()
-                                class_index: int = int(obb.cls[idx].item())
-                                if confidence < self.conf_threshold:
-                                    continue
-                                coords: np.ndarray = obb.xyxyxyxy[idx].cpu().numpy().flatten()
-                                coords[::2] += x
-                                coords[1::2] += y
-                                self.all_detections.append({
-                                    'class_index': class_index,
-                                    'coords': coords,
-                                    'confidence': confidence,
-                                    'source_image': image_id,
-                                    'transform': transform,
-                                    'crs': crs,
-                                    'type': 'obb'
-                                })
-                print(f"Detections collected from image {tif_href}: {len(self.all_detections)}")
+                            detections = self.extract_detections(result)
+                            for det in detections:
+                                # Generate a unique detection ID
+                                detection_id = str(uuid.uuid4())
+                                det['detection_id'] = detection_id
+                                det['coords'][::2] += x
+                                det['coords'][1::2] += y
+                                det['source_image'] = image_id
+                                det['transform'] = transform
+                                det['crs'] = crs
+                                self.all_detections.append(det)
+                                if generate_crops and crops_output_dir:
+                                    try:
+                                        self.save_detection_crop(
+                                            img_np, det, x, y, crops_output_dir
+                                        )
+                                    except Exception as e:
+                                        print(f"Error saving crop: {e}")
+            print(f"Detections collected from image {tif_href}: {len(self.all_detections)}")
         except Exception as e:
             print(f"Error processing image {tif_href}: {e}")
 
-    def process_image_bbox(self, tif_href: Union[str, Path]) -> None:
+    def extract_detections(self, result) -> List[Dict[str, Any]]:
         """
-        Processes a TIFF image and collects regular bounding box (BBox) detections.
+        Extracts detections from the model result.
 
         Args:
-            tif_href (Union[str, Path]): Path or URL to the TIFF image.
-        """
-        print(f"Processing image with regular bounding boxes: {tif_href}")
-        try:
-            with rasterio.open(tif_href) as dataset:
-                width: int = dataset.width
-                height: int = dataset.height
-                transform: rasterio.Affine = dataset.transform
-                crs: Any = dataset.crs
-                image_id: str = Path(tif_href).stem
-                x_windows: List[int] = list(range(0, width, self.stride))
-                y_windows: List[int] = list(range(0, height, self.stride))
-                print(f"Generated {len(x_windows)} x_windows and {len(y_windows)} y_windows for image {tif_href}")
-                for y in y_windows:
-                    for x in x_windows:
-                        results: Optional[List[Any]] = self.process_window(dataset, x, y)
-                        if not results:
-                            continue
-                        for result in results:
-                            boxes = result.boxes
-                            if boxes is None:
-                                continue
-                            for idx in range(len(boxes.conf)):
-                                confidence: float = boxes.conf[idx].item()
-                                class_index: int = int(boxes.cls[idx].item())
-                                if confidence < self.conf_threshold:
-                                    continue
-                                coords: np.ndarray = boxes.xyxy[idx].cpu().numpy()
-                                xmin, ymin, xmax, ymax = coords
-                                xmin += x
-                                xmax += x
-                                ymin += y
-                                ymax += y
-                                bbox_coords: List[Tuple[float, float]] = [
-                                    (xmin, ymin),  # Bottom-left
-                                    (xmax, ymin),  # Bottom-right
-                                    (xmax, ymax),  # Top-right
-                                    (xmin, ymax)   # Top-left
-                                ]
-                                self.all_detections.append({
-                                    'class_index': class_index,
-                                    'coords': bbox_coords,
-                                    'confidence': confidence,
-                                    'source_image': image_id,
-                                    'transform': transform,
-                                    'crs': crs,
-                                    'type': 'bbox'
-                                })
-                print(f"Detections collected from image {tif_href}: {len(self.all_detections)}")
-        except Exception as e:
-            print(f"Error processing image {tif_href}: {e}")
+            result: The result object from the model inference.
 
-    def process_stac_catalog(self, stac_catalog_url: Union[str, Path]) -> None:
+        Returns:
+            List[Dict[str, Any]]: List of detection dictionaries.
+        """
+        detections = []
+        if self.detection_type == 'obb' and hasattr(result, 'obb'):
+            obb = result.obb
+            if obb is None:
+                return detections
+            for idx in range(len(obb.conf)):
+                confidence: float = obb.conf[idx].item()
+                class_index: int = int(obb.cls[idx].item())
+                if confidence < self.conf_threshold:
+                    continue
+                coords: np.ndarray = obb.xyxyxyxy[idx].cpu().numpy().flatten()
+                detections.append({
+                    'class_index': class_index,
+                    'coords': coords,
+                    'confidence': confidence,
+                    'type': 'obb'
+                })
+        elif self.detection_type == 'bbox' and hasattr(result, 'boxes'):
+            boxes = result.boxes
+            if boxes is None:
+                return detections
+            for idx in range(len(boxes.conf)):
+                confidence: float = boxes.conf[idx].item()
+                class_index: int = int(boxes.cls[idx].item())
+                if confidence < self.conf_threshold:
+                    continue
+                coords: np.ndarray = boxes.xyxy[idx].cpu().numpy()
+                # Convert bbox to polygon coordinates
+                coords = np.array([coords[0], coords[1], coords[2], coords[1],
+                                   coords[2], coords[3], coords[0], coords[3]])
+                detections.append({
+                    'class_index': class_index,
+                    'coords': coords,
+                    'confidence': confidence,
+                    'type': 'bbox'
+                })
+        else:
+            print(f"Unknown detection type: {self.detection_type}")
+        return detections
+
+    def save_detection_crop(
+        self,
+        img_np: np.ndarray,
+        det: Dict[str, Any],
+        x_offset: int,
+        y_offset: int,
+        crops_output_dir: Path
+    ) -> None:
+        """
+        Saves the crop of a detection.
+
+        Args:
+            img_np (np.ndarray): The image data of the window.
+            det (Dict[str, Any]): Detection dictionary.
+            x_offset (int): The x-coordinate offset of the window.
+            y_offset (int): The y-coordinate offset of the window.
+            crops_output_dir (Path): Directory to save the crops.
+        """
+        coords = det['coords']
+        detection_id = det['detection_id']
+        # Adjust coordinates to window local
+        coords_local = coords.copy()
+        coords_local[::2] -= x_offset
+        coords_local[1::2] -= y_offset
+        # Create a mask for the polygon
+        polygon = Polygon(zip(coords_local[::2], coords_local[1::2]))
+        minx, miny, maxx, maxy = polygon.bounds
+        minx, miny = int(max(minx, 0)), int(max(miny, 0))
+        maxx, maxy = int(min(maxx, img_np.shape[1])), int(min(maxy, img_np.shape[0]))
+        if minx >= maxx or miny >= maxy:
+            return  # Invalid crop
+        crop_img = img_np[miny:maxy, minx:maxx]
+        # Generate the crop filename using the detection_id
+        crop_filename = f"{detection_id}.png"
+        crop_path = crops_output_dir / crop_filename
+        Image.fromarray(crop_img).save(crop_path)
+
+    def process_stac_catalog(
+        self,
+        stac_catalog_url: Union[str, Path],
+        generate_crops: bool = False,
+        crops_output_dir: Optional[Path] = None
+    ) -> None:
         """
         Processes images referenced in a STAC catalog.
 
         Args:
             stac_catalog_url (Union[str, Path]): URL or path to the STAC catalog.
+            generate_crops (bool, optional): If True, saves image crops of detections. Defaults to False.
+            crops_output_dir (Optional[Path], optional): Directory to save image crops. Defaults to None.
         """
         catalog: pystac.Catalog = pystac.Catalog.from_file(str(stac_catalog_url))
         print(f"Loaded STAC catalog from {stac_catalog_url}")
@@ -325,12 +361,7 @@ class GeoInference:
                 asset_media_type: Optional[str] = asset.media_type
                 if asset_media_type in ['image/tiff', 'image/geotiff']:
                     print(f"Processing asset {asset_key} with href {asset_href}")
-                    if self.detection_type == 'obb':
-                        self.process_image_obb(asset_href)
-                    elif self.detection_type == 'bbox':
-                        self.process_image_bbox(asset_href)
-                    else:
-                        print(f"Unknown detection type: {self.detection_type}")
+                    self.process_image(asset_href, generate_crops, crops_output_dir)
                 else:
                     print(f"Skipping asset {asset_key} with media type {asset_media_type}")
         self.convert_and_save_detections()
@@ -345,21 +376,14 @@ class GeoInference:
         geo_detections: List[Dict[str, Any]] = []
         for det in self.all_detections:
             class_index: int = det['class_index']
-            coords: Union[np.ndarray, List[Tuple[float, float]]] = det['coords']
+            coords: np.ndarray = det['coords']
             confidence: float = det['confidence']
             source_image: str = det['source_image']
             transform: rasterio.Affine = det['transform']
             crs: Any = det['crs']
-            det_type: str = det['type']
-            if det_type == 'obb':
-                # Convert flat array of coordinates to list of (x, y) tuples
-                pixel_coords: List[Tuple[float, float]] = list(zip(coords[::2], coords[1::2]))
-            elif det_type == 'bbox':
-                # Coordinates are already in [(x, y), ...] format
-                pixel_coords: List[Tuple[float, float]] = coords
-            else:
-                print(f"Unknown detection type: {det_type}")
-                continue
+            detection_id: str = det['detection_id']  # Get the detection_id
+            # Convert flat array of coordinates to list of (x, y) tuples
+            pixel_coords: List[Tuple[float, float]] = list(zip(coords[::2], coords[1::2]))
             geo_coords: List[Tuple[float, float]] = [
                 self.pixel_to_geo(transform, x_pixel, y_pixel)
                 for x_pixel, y_pixel in pixel_coords
@@ -371,7 +395,8 @@ class GeoInference:
                 'confidence': confidence,
                 'class_index': class_index,
                 'class_name': class_name,
-                'source_image': source_image
+                'source_image': source_image,
+                'detection_id': detection_id  # Include the detection_id in the GeoDataFrame
             })
         gdf: gpd.GeoDataFrame = gpd.GeoDataFrame(geo_detections, geometry='geometry')
         gdf.crs = crs
@@ -382,7 +407,9 @@ class GeoInference:
         self,
         tif_path: Optional[Union[str, Path]] = None,
         stac_catalog_url: Optional[Union[str, Path]] = None,
-        cog_url: Optional[Union[str, Path]] = None
+        cog_url: Optional[Union[str, Path]] = None,
+        generate_crops: bool = False,
+        crops_output_dir: Optional[Union[str, Path]] = None
     ) -> None:
         """
         Executes the geospatial inference process based on the provided input.
@@ -391,26 +418,21 @@ class GeoInference:
             tif_path (Optional[Union[str, Path]], optional): Path to a TIFF image. Defaults to None.
             stac_catalog_url (Optional[Union[str, Path]], optional): URL or path to a STAC catalog. Defaults to None.
             cog_url (Optional[Union[str, Path]], optional): URL to a Cloud Optimized GeoTIFF (COG). Defaults to None.
+            generate_crops (bool, optional): If True, saves image crops of detections. Defaults to False.
+            crops_output_dir (Optional[Union[str, Path]], optional): Directory to save image crops. Defaults to None.
         """
+        if generate_crops:
+            crops_output_dir = Path(crops_output_dir) if crops_output_dir else self.output_path.parent / "detection_crops"
+        else:
+            crops_output_dir = None
+
         if tif_path:
-            if self.detection_type == 'obb':
-                self.process_image_obb(tif_path)
-            elif self.detection_type == 'bbox':
-                self.process_image_bbox(tif_path)
-            else:
-                print(f"Unknown detection type: {self.detection_type}")
-                return
+            self.process_image(tif_path, generate_crops, crops_output_dir)
             self.convert_and_save_detections()
         elif stac_catalog_url:
-            self.process_stac_catalog(stac_catalog_url)
+            self.process_stac_catalog(stac_catalog_url, generate_crops, crops_output_dir)
         elif cog_url:
-            if self.detection_type == 'obb':
-                self.process_image_obb(cog_url)
-            elif self.detection_type == 'bbox':
-                self.process_image_bbox(cog_url)
-            else:
-                print(f"Unknown detection type: {self.detection_type}")
-                return
+            self.process_image(cog_url, generate_crops, crops_output_dir)
             self.convert_and_save_detections()
         else:
             print("No input provided. Please specify a tif_path, stac_catalog_url, or cog_url.")
