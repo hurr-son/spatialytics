@@ -1,5 +1,4 @@
 
-
 # yolo-geospatial-implentations
 
 This repo is a collection of scripts and experiments for running YOLO-based object detection on geospatial imagery. It’s a bit of a work-in-progress, mostly aimed at testing different ways to detect objects in raster images (TIFFs, Cloud Optimized GeoTIFFs, and STAC catalog images) using YOLO. Both standard bounding boxes (BBox) and Oriented Bounding Boxes (OBB) are supported.
@@ -31,6 +30,7 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
 ## How to Use
 
 1. **Initialize the `GeoInference` Class**:
+
    ```python
    from inference import GeoInference
 
@@ -44,11 +44,11 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
       iou_threshold=0.3,      # IoU threshold
       detection_type="obb"    # Set to "obb" or "bbox"
    )
-
    ```
 
 2. **Run Inference**:
    Pick your input type: local TIFF, COG, or STAC catalog.
+
    ```python
    geo_inference.run(tif_path="path/to/image.tif")
    # or
@@ -58,15 +58,13 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
    ```
 
    Optionally, if you want to save detection crops, indicate like:
+
    ```python
    geo_inference.run(cog_url=cog_url, generate_crops=True, crops_output_dir="path/to/crop/folder")
    ```
 
-
 3. **Results**:  
    The detections (with geographic coordinates) will be saved as a Parquet file in the path you specified.
-
-
 
 ## Utils
 
