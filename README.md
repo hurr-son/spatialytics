@@ -57,6 +57,12 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
    geo_inference.run(cog_url="https://example.com/image.cog.tif")
    ```
 
+   Optionally, if you want to save detection crops, indicate like:
+   ```python
+   geo_inference.run(cog_url=cog_url, generate_crops=True, crops_output_dir="path/to/crop/folder")
+   ```
+
+
 3. **Results**:  
    The detections (with geographic coordinates) will be saved as a Parquet file in the path you specified.
 
@@ -69,7 +75,6 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
 When using the sliding window technique in `GeoInference`, overlapping windows naturally produce duplicate detections. Even with non-maximum suppression (NMS) applied within each window, duplicates can remain across windows due to the overlap. By default, `GeoInference` uses a **1280-pixel window** with a **640-pixel stride**, resulting in a 50% overlap. However, these values can be adjusted by the user.
 
 To address duplicate detections across overlapping windows, `obb_nms.py` provides a custom NMS function that consolidates these detections post-inference.
-
 
 #### Example Usage
 
