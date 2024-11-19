@@ -32,7 +32,7 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
 
 1. **Initialize the `GeoInference` Class**:
    ```python
-   from ultralytics_inference import GeoInference
+   from inference import GeoInference
 
    geo_inference = GeoInference(
       model_path="path/to/your/yolo/model.pt",
