@@ -23,32 +23,27 @@ class GeoInference:
 
     Attributes:
         model_path (Path): Path to the trained YOLO model.
-        class_yaml_path (Path): Path to the YAML file containing class mappings.
         output_path (Path): Path where the output detections will be saved.
         window_size (int): Size of the sliding window for processing the image.
         stride (int): Stride of the sliding window.
         conf_threshold (float): Confidence threshold for detections.
+        classes_list ([List[int]], optional): List of class indices that map to the dataset yaml used for training.
         iou_threshold (float): Intersection over Union threshold for NMS.
-        classes_list_input (Optional[List[Union[int, str]]]): List of class indices or names to detect.
-        classes_list (Optional[List[int]]): Processed list of class indices to detect.
         detection_type (str): Type of detection ('obb' or 'bbox').
         all_detections (List[Dict[str, Any]]): Accumulated detections from the image.
         model (YOLO): Loaded YOLO model for inference.
-        classes_index_to_name (Dict[str, Any]): Mapping of class indices to class names.
-        classes_name_to_index (Dict[str, int]): Mapping of class names to class indices.
         device (str): The device to run inference on ('cuda' or 'cpu').
     """
 
     def __init__(
         self,
         model_path: Union[str, Path],
-        class_yaml_path: Union[str, Path],
         output_path: Union[str, Path],
         window_size: int = 1280,
         stride: int = 640,
         conf_threshold: float = 0.1,
         iou_threshold: float = 0.5,
-        classes_list: Optional[List[Union[int, str]]] = None,
+        classes_list: Optional[List[int]] = None,
         detection_type: str = "obb",
         device: Optional[str] = None,
     ) -> None:
@@ -57,31 +52,26 @@ class GeoInference:
 
         Args:
             model_path (Union[str, Path]): Path to the trained YOLO model.
-            class_yaml_path (Union[str, Path]): Path to the YAML file with class mappings.
             output_path (Union[str, Path]): Path where output detections will be saved.
             window_size (int, optional): Size of the sliding window. Defaults to 1280.
             stride (int, optional): Stride of the sliding window. Defaults to 640.
             conf_threshold (float, optional): Confidence threshold for detections. Defaults to 0.1.
             iou_threshold (float, optional): IoU threshold for Non-Maximum Suppression. Defaults to 0.5.
-            classes_list (Optional[List[Union[int, str]]], optional): List of class indices or names to detect.
+            classes_list ([List[int]], optional): List of class indices that map to the dataset yaml used for training.
             detection_type (str, optional): Type of detection ('obb' or 'bbox'). Defaults to 'obb'.
             device (Optional[str], optional): Device to use for computation ('cuda' or 'cpu'). Defaults to None.
         """
         self.device = device if device else self.get_device()
         self.model_path: Path = Path(model_path)
-        self.class_yaml_path: Path = Path(class_yaml_path)
         self.output_path: Path = Path(output_path)
         self.window_size: int = window_size
         self.stride: int = stride
         self.conf_threshold: float = conf_threshold
         self.iou_threshold: float = iou_threshold
-        self.classes_list_input: Optional[List[Union[int, str]]] = classes_list
-        self.classes_list: Optional[List[int]] = None  # Will hold the processed indices
+        self.classes_list: Optional[List[int]] = classes_list
         self.detection_type: str = detection_type
         self.all_detections: List[Dict[str, Any]] = []
         self.load_model()
-        self.load_classes()
-        self.process_classes_list()
         self.output_path.parent.mkdir(parents=True, exist_ok=True)
 
     def get_device(self) -> str:
@@ -101,46 +91,6 @@ class GeoInference:
         """
         self.model: YOLO = YOLO(self.model_path)
         print(f"Loaded model from {self.model_path}")
-
-    def load_classes(self) -> None:
-        """
-        Loads class mappings from the YAML file and creates mappings from indices to names and names to indices.
-        """
-        try:
-            with open(self.class_yaml_path, "r") as file:
-                class_data = yaml.safe_load(file)
-            self.classes_index_to_name = class_data.get("names", {})
-            # Create reverse mapping
-            self.classes_name_to_index = {
-                name: int(index) for index, name in self.classes_index_to_name.items()
-            }
-            print(f"Loaded classes: {self.classes_index_to_name}")
-        except FileNotFoundError:
-            print("Class YAML file not found. Ensure the file path is correct.")
-            self.classes_index_to_name = {}
-            self.classes_name_to_index = {}
-
-    def process_classes_list(self) -> None:
-        """
-        Processes the classes_list input, converting class names to indices if necessary.
-        """
-        if self.classes_list_input is None:
-            self.classes_list = None
-            return
-        self.classes_list = []
-        for cls in self.classes_list_input:
-            if isinstance(cls, int):
-                self.classes_list.append(cls)
-            elif isinstance(cls, str):
-                cls_index = self.classes_name_to_index.get(cls)
-                if cls_index is not None:
-                    self.classes_list.append(cls_index)
-                else:
-                    print(f"Warning: Class name '{cls}' not found in class mappings.")
-            else:
-                print(
-                    f"Warning: Unsupported class type '{type(cls)}' in classes_list. Expected int or str."
-                )
 
     def pixel_to_geo(
         self, transform: rasterio.Affine, x: float, y: float
@@ -230,7 +180,6 @@ class GeoInference:
                         for result in results:
                             detections = self.extract_detections(result)
                             for det in detections:
-                                # Generate a unique detection ID
                                 detection_id = str(uuid.uuid4())
                                 det["detection_id"] = detection_id
                                 det["coords"][::2] += x
@@ -263,6 +212,8 @@ class GeoInference:
             List[Dict[str, Any]]: List of detection dictionaries.
         """
         detections = []
+        class_names = result.names
+        
         if self.detection_type == "obb" and hasattr(result, "obb"):
             obb = result.obb
             if obb is None:
@@ -276,6 +227,7 @@ class GeoInference:
                 detections.append(
                     {
                         "class_index": class_index,
+                        "class_name" : class_names[class_index],
                         "coords": coords,
                         "confidence": confidence,
                         "type": "obb",
@@ -291,7 +243,6 @@ class GeoInference:
                 if confidence < self.conf_threshold:
                     continue
                 coords: np.ndarray = boxes.xyxy[idx].cpu().numpy()
-                # Convert bbox to polygon coordinates
                 coords = np.array(
                     [
                         coords[0],
@@ -307,6 +258,7 @@ class GeoInference:
                 detections.append(
                     {
                         "class_index": class_index,
+                        "class_name" : class_names[class_index],
                         "coords": coords,
                         "confidence": confidence,
                         "type": "bbox",
@@ -336,19 +288,18 @@ class GeoInference:
         """
         coords = det["coords"]
         detection_id = det["detection_id"]
-        # Adjust coordinates to window local
         coords_local = coords.copy()
         coords_local[::2] -= x_offset
         coords_local[1::2] -= y_offset
-        # Create a mask for the polygon
+
         polygon = Polygon(zip(coords_local[::2], coords_local[1::2]))
         minx, miny, maxx, maxy = polygon.bounds
         minx, miny = int(max(minx, 0)), int(max(miny, 0))
         maxx, maxy = int(min(maxx, img_np.shape[1])), int(min(maxy, img_np.shape[0]))
         if minx >= maxx or miny >= maxy:
-            return  # Invalid crop
+            return  
         crop_img = img_np[miny:maxy, minx:maxx]
-        # Generate the crop filename using the detection_id
+
         crop_filename = f"{detection_id}.png"
         crop_path = crops_output_dir / crop_filename
         Image.fromarray(crop_img).save(crop_path)
@@ -394,13 +345,14 @@ class GeoInference:
         geo_detections: List[Dict[str, Any]] = []
         for det in self.all_detections:
             class_index: int = det["class_index"]
+            class_name: str = det["class_name"]
             coords: np.ndarray = det["coords"]
             confidence: float = det["confidence"]
             source_image: str = det["source_image"]
             transform: rasterio.Affine = det["transform"]
             crs: Any = det["crs"]
-            detection_id: str = det["detection_id"]  # Get the detection_id
-            # Convert flat array of coordinates to list of (x, y) tuples
+            detection_id: str = det["detection_id"]  
+      
             pixel_coords: List[Tuple[float, float]] = list(
                 zip(coords[::2], coords[1::2])
             )
@@ -409,9 +361,9 @@ class GeoInference:
                 for x_pixel, y_pixel in pixel_coords
             ]
             geometry: Polygon = Polygon(geo_coords)
-            class_name = self.classes_index_to_name.get(
-                str(class_index), str(class_index)
-            )
+            # class_name = self.classes_index_to_name.get(
+            #     str(class_index), str(class_index)
+            # )
             geo_detections.append(
                 {
                     "geometry": geometry,
@@ -419,7 +371,7 @@ class GeoInference:
                     "class_index": class_index,
                     "class_name": class_name,
                     "source_image": source_image,
-                    "detection_id": detection_id,  # Include the detection_id in the GeoDataFrame
+                    "detection_id": detection_id,  
                 }
             )
         gdf: gpd.GeoDataFrame = gpd.GeoDataFrame(geo_detections, geometry="geometry")
