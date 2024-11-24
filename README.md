@@ -37,7 +37,7 @@ The repository includes the smallest version of this model, `YOLO11n-obb`, as we
    geo_inference = GeoInference(
       model_path="path/to/your/yolo/model.pt",
       output_path="path/to/output/detections.parquet",
-      class_list = [0,1,4,5] #For multi-class models, you can specify a list of indices for inferece that map to the dataset yaml used for training
+      class_list = [0,1,4,5] #For multi-class models, you can specify a list of indices for inference that map to the dataset yaml used for training
       window_size=1280,     
       stride=640,          
       conf_threshold=0.25,  
