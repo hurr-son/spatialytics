@@ -1,8 +1,10 @@
 geopandas
+rasterio
 shapely
 numpy
-tqdm
-rasterio
+Pillow
+PyYAML
 ultralytics
+torch
+tqdm
 pystac
-pyyam
