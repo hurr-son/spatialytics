@@ -6,7 +6,6 @@ import geopandas as gpd
 from ultralytics import YOLO
 import pystac
 from pathlib import Path
-import yaml
 import torch
 from typing import List, Optional, Dict, Any, Union, Tuple
 from PIL import Image
@@ -213,7 +212,7 @@ class GeoInference:
         """
         detections = []
         class_names = result.names
-        
+
         if self.detection_type == "obb" and hasattr(result, "obb"):
             obb = result.obb
             if obb is None:
@@ -227,7 +226,7 @@ class GeoInference:
                 detections.append(
                     {
                         "class_index": class_index,
-                        "class_name" : class_names[class_index],
+                        "class_name": class_names[class_index],
                         "coords": coords,
                         "confidence": confidence,
                         "type": "obb",
@@ -258,7 +257,7 @@ class GeoInference:
                 detections.append(
                     {
                         "class_index": class_index,
-                        "class_name" : class_names[class_index],
+                        "class_name": class_names[class_index],
                         "coords": coords,
                         "confidence": confidence,
                         "type": "bbox",
@@ -297,7 +296,7 @@ class GeoInference:
         minx, miny = int(max(minx, 0)), int(max(miny, 0))
         maxx, maxy = int(min(maxx, img_np.shape[1])), int(min(maxy, img_np.shape[0]))
         if minx >= maxx or miny >= maxy:
-            return  
+            return
         crop_img = img_np[miny:maxy, minx:maxx]
 
         crop_filename = f"{detection_id}.png"
@@ -351,8 +350,8 @@ class GeoInference:
             source_image: str = det["source_image"]
             transform: rasterio.Affine = det["transform"]
             crs: Any = det["crs"]
-            detection_id: str = det["detection_id"]  
-      
+            detection_id: str = det["detection_id"]
+
             pixel_coords: List[Tuple[float, float]] = list(
                 zip(coords[::2], coords[1::2])
             )
@@ -361,9 +360,7 @@ class GeoInference:
                 for x_pixel, y_pixel in pixel_coords
             ]
             geometry: Polygon = Polygon(geo_coords)
-            # class_name = self.classes_index_to_name.get(
-            #     str(class_index), str(class_index)
-            # )
+
             geo_detections.append(
                 {
                     "geometry": geometry,
@@ -371,7 +368,7 @@ class GeoInference:
                     "class_index": class_index,
                     "class_name": class_name,
                     "source_image": source_image,
-                    "detection_id": detection_id,  
+                    "detection_id": detection_id,
                 }
             )
         gdf: gpd.GeoDataFrame = gpd.GeoDataFrame(geo_detections, geometry="geometry")
@@ -384,6 +381,7 @@ class GeoInference:
         tif_path: Optional[Union[str, Path]] = None,
         stac_catalog_url: Optional[Union[str, Path]] = None,
         cog_url: Optional[Union[str, Path]] = None,
+        cog_urls: Optional[List[Union[str, Path]]] = None,
         generate_crops: bool = False,
         crops_output_dir: Optional[Union[str, Path]] = None,
     ) -> None:
@@ -394,6 +392,7 @@ class GeoInference:
             tif_path (Optional[Union[str, Path]], optional): Path to a TIFF image. Defaults to None.
             stac_catalog_url (Optional[Union[str, Path]], optional): URL or path to a STAC catalog. Defaults to None.
             cog_url (Optional[Union[str, Path]], optional): URL to a Cloud Optimized GeoTIFF (COG). Defaults to None.
+            cog_urls (Optional[List[Union[str, Path]]], optional): List of URLs to COGs. Defaults to None.
             generate_crops (bool, optional): If True, saves image crops of detections. Defaults to False.
             crops_output_dir (Optional[Union[str, Path]], optional): Directory to save image crops. Defaults to None.
         """
@@ -416,7 +415,11 @@ class GeoInference:
         elif cog_url:
             self.process_image(cog_url, generate_crops, crops_output_dir)
             self.convert_and_save_detections()
+        elif cog_urls:
+            for url in cog_urls:
+                self.process_image(url, generate_crops, crops_output_dir)
+            self.convert_and_save_detections()
         else:
             print(
-                "No input provided. Please specify a tif_path, stac_catalog_url, or cog_url."
+                "No input provided. Please specify a tif_path, stac_catalog_url, cog_url, or cog_urls."
             )
