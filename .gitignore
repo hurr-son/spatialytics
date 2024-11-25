@@ -109,3 +109,4 @@ test/
 test.py
 test.ipynb
 data/
+inference_and_display.ipynb
