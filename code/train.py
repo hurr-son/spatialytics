@@ -93,7 +93,7 @@ class GeoTrain(BaseObjectDetectionTrainer):
     """
     A class for preparing geospatial data and training a YOLO model.
 
-    Inherits from BaseTrainer.
+    Inherits from BaseObjectDetectionTrainer.
     """
 
     def __init__(
@@ -313,7 +313,7 @@ class YOLOTrain(BaseObjectDetectionTrainer):
     """
     A class for training a YOLO model on pre-chipped datasets.
 
-    Inherits from BaseTrainer.
+    Inherits from BaseObjectDetectionTrainer.
     """
 
     def __init__(
