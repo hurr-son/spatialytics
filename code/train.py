@@ -136,7 +136,6 @@ class GeoTrain(BaseObjectDetectionTrainer):
         self.vector_data: Optional[gpd.GeoDataFrame] = None
         self.raster: Optional[rasterio.io.DatasetReader] = None
 
-        # Load files
         self.load_files()
 
     def load_files(self) -> None:
