@@ -14,9 +14,10 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 from itertools import product
+import warnings
 
 
-class BaseObjectDetectionTrainer:
+class BaseTrainer:
     """
     A base class for training YOLO models.
     """
@@ -56,7 +57,7 @@ class BaseObjectDetectionTrainer:
         Loads the YOLO model.
         """
         print(f"Loading YOLO model from {self.model_path}")
-        self.model = YOLO(self.model_path)
+        self.model = YOLO(model=self.model_path)
 
     def train_model(self, data_yaml: Union[str, Path]) -> None:
         """
@@ -89,11 +90,11 @@ class BaseObjectDetectionTrainer:
         raise NotImplementedError("Subclasses should implement this method.")
 
 
-class GeoTrain(BaseObjectDetectionTrainer):
+class GeoTrain(BaseTrainer):
     """
     A class for preparing geospatial data and training a YOLO model.
 
-    Inherits from BaseObjectDetectionTrainer.
+    Inherits from BaseTrainer.
     """
 
     def __init__(
@@ -309,11 +310,118 @@ class GeoTrain(BaseObjectDetectionTrainer):
         self.save_model_and_benchmarks()
 
 
-class YOLOTrain(BaseObjectDetectionTrainer):
+class GeoTrainInstanceSegmentation(GeoTrain):
+    """
+    A class for preparing geospatial data and training a YOLO model for instance segmentation.
+
+    Inherits from GeoTrain.
+    """
+
+    def __init__(
+        self,
+        vector_path: Union[str, Path],
+        raster_path: Union[str, Path],
+        model_path: Union[str, Path],
+        output_dir: Union[str, Path],
+        chip_size: int = 640,
+        stride: int = 320,
+        val_split: float = 0.2,
+        class_names: Optional[List[str]] = None,
+        epochs: int = 100,
+        batch_size: int = 16,
+        img_size: int = 640,
+        device: Optional[str] = None,
+    ) -> None:
+        """
+        Initializes the GeoTrainInstanceSegmentation class with the specified parameters.
+        """
+        super().__init__(
+            vector_path,
+            raster_path,
+            model_path,
+            output_dir,
+            chip_size,
+            stride,
+            val_split,
+            class_names,
+            epochs,
+            batch_size,
+            img_size,
+            device,
+        )
+        self.task = 'segment'  # Set task to 'segment' for instance segmentation
+        self.model: Optional[YOLO] = None
+        self.load_model()
+
+    def generate_labels_for_chip(
+        self, x: int, y: int,
+        window_transform, inv_window_transform,
+        label_path: Path
+    ) -> None:
+        """
+        Generates labels for a given chip for instance segmentation.
+        """
+        window = Window(x, y, self.chip_size, self.chip_size)
+        chip_bounds = rasterio.windows.bounds(window, transform=self.raster.transform)
+        chip_geom = box(*chip_bounds)
+        chip_labels = self.vector_data[self.vector_data.intersects(chip_geom)]
+
+        if not chip_labels.empty:
+            with open(label_path, 'w') as f:
+                for _, row in chip_labels.iterrows():
+                    geom = row['geometry'].intersection(chip_geom)
+                    if geom.is_empty:
+                        continue
+
+                    if geom.geom_type not in ['Polygon', 'MultiPolygon']:
+                        continue
+
+                    polygons = []
+                    if geom.geom_type == 'Polygon':
+                        polygons = [geom]
+                    elif geom.geom_type == 'MultiPolygon':
+                        polygons = list(geom.geoms)
+
+                    for polygon in polygons:
+                        # Get all exterior coordinates
+                        exterior_coords = np.array(polygon.exterior.coords)
+                        # Transform to image pixel coordinates relative to the chip
+                        pixel_coords = []
+                        for coord in exterior_coords:
+                            x_world, y_world = coord
+                            col, row = inv_window_transform * (x_world, y_world)
+                            x_norm = col / self.chip_size
+                            y_norm = row / self.chip_size
+                            x_norm = np.clip(x_norm, 0.0, 1.0)
+                            y_norm = np.clip(y_norm, 0.0, 1.0)
+                            pixel_coords.extend([x_norm, y_norm])
+
+                        if len(pixel_coords) < 6:
+                            # Need at least 3 points to form a polygon
+                            continue
+
+                        class_name = row.get('class_name', 'object')
+                        if class_name in self.class_names:
+                            class_idx = self.class_names.index(class_name)
+                        else:
+                            # If class_name not in class_names, skip this object
+                            continue
+
+                        # Write the label line in YOLO segmentation format
+                        coords_str = " ".join([f"{coord:.6f}" for coord in pixel_coords])
+                        f.write(f"{class_idx} {coords_str}\n")
+        else:
+            label_path.touch()
+
+
+
+
+
+class YOLOTrain(BaseTrainer):
     """
     A class for training a YOLO model on pre-chipped datasets.
 
-    Inherits from BaseObjectDetectionTrainer.
+    Inherits from BaseTrainer.
     """
 
     def __init__(
@@ -340,30 +448,21 @@ class YOLOTrain(BaseObjectDetectionTrainer):
         self.save_model_and_benchmarks()
 
 
-# if __name__ == "__main__":
-#     geo_train = GeoTrain(
-#         vector_path='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/bounding_boxes.geojson',
-#         raster_path='https://coastalimagery.blob.core.windows.net/digitalcoast/WI_NAIP_2020_9514/m_4308757_se_16_060_20200902.tif',
-#         model_path='/home/hurr_son/repos/yolo-geospatial-implementations/models/pretrained/yolo11n.pt',
-#         output_dir='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/output',
-#         chip_size=640,
-#         stride=640,
-#         val_split=0.2,
-#         class_names=['buldings'],
-#         epochs=100,
-#         batch_size=8,
-#         img_size=640,
-#         device='cuda'
-#     )
-#     geo_train.run()
+if __name__ == "__main__":
+    geo_train_segmentation = GeoTrainInstanceSegmentation(
+        vector_path='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/instance-seg/mke_building_subsection.geojson',
+        raster_path='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/instance-seg/mkesubsection.tif',
+        model_path='/home/hurr_son/repos/yolo-geospatial-implementations/models/pretrained/yolo11n-seg.pt',
+        output_dir='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/instance-seg/output',
+        chip_size=1280,
+        stride=1280,
+        val_split=0.2,
+        class_names=['building'],
+        epochs=5,
+        batch_size=8,
+        img_size=640,
+        device='cuda'
+    )
+    geo_train_segmentation.run()
 
-    # yolo_train = YOLOTrain(
-    #     data_yaml='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/diorsubset/DIOR subset.v2-trained.yolov11/data.yaml',  # For YOLO format datasets
-    #     model_path='/home/hurr_son/repos/yolo-geospatial-implementations/models/pretrained/yolo11n.pt',
-    #     output_dir='/home/hurr_son/repos/yolo-geospatial-implementations/data/train/output',
-    #     epochs=5,
-    #     batch_size=8,
-    #     img_size=640,
-    #     device='cuda'
-    # )
-    # yolo_train.run()
+    
