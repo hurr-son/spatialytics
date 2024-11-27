@@ -5,6 +5,5 @@ numpy
 Pillow
 PyYAML
 ultralytics
-torch
 tqdm
 pystac
