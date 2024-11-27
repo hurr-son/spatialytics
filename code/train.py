@@ -16,7 +16,7 @@ from tqdm import tqdm
 from itertools import product
 
 
-class BaseObjectDetectionTrainer:
+class BaseTrainer:
     """
     A base class for training YOLO models.
     """
@@ -89,11 +89,11 @@ class BaseObjectDetectionTrainer:
         raise NotImplementedError("Subclasses should implement this method.")
 
 
-class GeoTrain(BaseObjectDetectionTrainer):
+class GeoTrain(BaseTrainer):
     """
     A class for preparing geospatial data and training a YOLO model.
 
-    Inherits from BaseObjectDetectionTrainer.
+    Inherits from BaseTrainer.
     """
 
     def __init__(
@@ -309,11 +309,11 @@ class GeoTrain(BaseObjectDetectionTrainer):
         self.save_model_and_benchmarks()
 
 
-class YOLOTrain(BaseObjectDetectionTrainer):
+class YOLOTrain(BaseTrainer):
     """
     A class for training a YOLO model on pre-chipped datasets.
 
-    Inherits from BaseObjectDetectionTrainer.
+    Inherits from BaseTrainer.
     """
 
     def __init__(
