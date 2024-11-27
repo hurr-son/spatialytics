@@ -13,11 +13,19 @@ This repository is a collection of scripts and experiments focused on extending 
 
 Tested on `WSL2` with `Ubuntu 22.04.5 LTS` and `Python 3.10.15`.
 
-Install the main dependencies:
+Clone repository:
 
 ```bash
 git clone https://github.com/hurr-son/spatialytics.git
 cd yolo-geospatial-implementations
+```
+Install the main dependencies:
+
+To install PyTorch, Ultralytics recommends you utilize the [Start Locally](https://pytorch.org/get-started/locally/) on PyTorch's website.
+
+For the rest of the dependencies, run:
+
+```bash
 pip install -r requirements.txt
 ```
 
