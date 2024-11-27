@@ -1,4 +1,4 @@
-# YOLO Geospatial Implementations
+# spatialytics
 
 This repository is a collection of scripts and experiments for running YOLO-based object detection on geospatial imagery. It's a work-in-progress aimed at testing different methods for detecting objects in raster images (TIFFs, Cloud Optimized GeoTIFFs, and STAC catalog images) using YOLO. Both standard bounding boxes (BBox) and Oriented Bounding Boxes (OBB) are supported.
 
@@ -16,7 +16,7 @@ Tested on `WSL2` with `Ubuntu 22.04.5 LTS` and `Python 3.10.15`.
 Install the main dependencies:
 
 ```bash
-git clone https://github.com/hurr-son/yolo-geospatial-implementations.git
+git clone https://github.com/hurr-son/spatialytics.git
 cd yolo-geospatial-implementations
 pip install -r requirements.txt
 ```
