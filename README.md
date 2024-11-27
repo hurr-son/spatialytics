@@ -19,10 +19,10 @@ Clone repository:
 git clone https://github.com/hurr-son/spatialytics.git
 cd yolo-geospatial-implementations
 ```
+
 Install the main dependencies:
 
-To install PyTorch, Ultralytics recommends you utilize the [Start Locally](https://pytorch.org/get-started/locally/) on PyTorch's website.
-
+For PyTorch, Ultralytics recommends you utilize the [Start Locally](https://pytorch.org/get-started/locally/) on PyTorch's website.
 For the rest of the dependencies, run:
 
 ```bash
